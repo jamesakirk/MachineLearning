@@ -1,0 +1,78 @@
+---
+title: "ML Course Project"
+author: "James Kirk"
+date: "01/21/2015"
+output: html_document
+---
+
+##Goal
+
+The goal of this assignment is to apply a machine learning algorithm to a basic classification problem. First, we load the data and the library we will need to process it:
+```{r}
+set.seed(404)
+library(caret)
+setwd("~/Downloads/CourseraML")
+all.training.data <- read.csv(file = "pml-training.csv", na.strings=c("NA",""))
+all.testing.data <- read.csv(file = "pml-testing.csv", na.strings=c("NA",""))
+```
+
+##Data Processing
+Next, select only predictor variables which are defined for each and every row of data. Also, remove the first 6 columns of data, as they are timestamps etc.
+```{r}
+#remove incomplete columns
+complete.cols <- sapply(all.training.data, function(x) all(!is.na(x)))
+comp.train.data <- all.training.data[complete.cols]
+comp.test.data <- all.testing.data[complete.cols]
+#remove useless columns
+useless <- 1:6
+use.train.data <- comp.train.data[-useless]
+testing <- comp.test.data[-useless]
+```
+
+##Subset Creation
+Next, reserve a subset of the training data to validate the model. In order to test for over-fitting the model, we must cross-validate against data that was not used to build the model. In-sample error rate is optimistic, so the validation set will give us a much better prediction of out-of-sample errors.
+```{r}
+#split training data into predictor and data frames
+inTrain<- createDataPartition(y=use.train.data$classe, p=0.75, list=FALSE)
+training<-use.train.data[inTrain,]
+validation<-use.train.data[-inTrain,]
+```
+
+##Train a Model
+Here, I have chosen a Random Forest model. For this limited dataset, scalability, speed, and interpretablity are not important. Accuracy is very important. Therfore, RF should perform well:
+```{r CACHE=TRUE}
+control <- trainControl(method = "cv", number = 10)
+#Random forest takes a while. Be Patient!
+my.model <- train(classe~., data=training, method="rf", trControl = control)
+```
+
+##Compute In-Sample Error Rate
+Now that the model has been trained, we can examine the in-sample error rate:
+```{r}
+predictions <- predict(my.model,newdata = training)
+confusionMatrix(predictions, training$classe)
+```
+
+A 99.97% accuracy is quite good! However, since this data was used to create the model, there may be overfitting, and this may not be an accurate and unbiassed metric of model performance.
+
+##Compute Validation Set Error Rate
+```{r}
+predictions <- predict(my.model,newdata = validation)
+confusionMatrix(predictions, validation$classe)
+```
+
+Here we get a 99.85% accuracy for out-of-sample data. For the 20 testing data points, we can expect similar accuracy. This is quite good indeed!
+
+##Compute Predictions for Testing set
+  Finally, we can predict the activity classe for the 20 test cases given:
+```{r}
+predictions <- predict(my.model,newdata = testing)
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(predictions)
+```
